@@ -26,6 +26,8 @@ un usage script, utilise `dockerop start --no-banner`.
 
 ```bash
 dockerop start              # lance OpenCode dans Docker
+dockerop -s ses_xxxx        # lance OpenCode avec une session precise
+dockerop start -s ses_xxxx  # equivalent explicite
 dockerop start --no-banner  # lance sans presentation
 dockerop init               # cree .dockerop/
 dockerop init --method install-script # image locale avec install officiel
@@ -60,6 +62,13 @@ Pour passer des arguments a OpenCode :
 
 ```bash
 dockerop start -- --help
+```
+
+Pour reprendre/reinitialiser une session OpenCode precise :
+
+```bash
+dockerop -s ses_xxxx
+dockerop start -s ses_xxxx
 ```
 
 ## Installation

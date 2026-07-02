@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.4"
+VERSION = "0.3.5"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 
@@ -324,6 +324,9 @@ def start(args: argparse.Namespace) -> int:
     if getattr(args, "no_build", False):
         run_command.append("--no-build")
     run_command.append("opencode")
+    session_id = getattr(args, "session", None)
+    if session_id:
+        run_command += ["-s", session_id]
     override = getattr(args, "command", None)
     if override:
         run_command += override
@@ -502,6 +505,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="store_true", help="show dockerop version")
+    parser.add_argument("-s", "--session", help="start OpenCode with a session id")
     subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init", aliases=["i"], help=f"create {APP_DIR}/ configuration")
@@ -518,6 +522,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser = subparsers.add_parser("start", aliases=["run", "s"], help="start OpenCode in Docker")
     start_parser.add_argument("--no-build", action="store_true", help="do not build the Docker image")
     start_parser.add_argument("--no-banner", action="store_true", help="do not print dockerop launch banner")
+    start_parser.add_argument("-s", "--session", help="start OpenCode with a session id")
     start_parser.add_argument("command", nargs=argparse.REMAINDER, help="optional command passed after opencode")
     start_parser.set_defaults(func=start)
 

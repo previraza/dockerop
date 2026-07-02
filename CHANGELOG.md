@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+
+- Add `dockerop -s <session>` and `dockerop start -s <session>` to launch OpenCode with a session id.
+
 ## 0.3.4
 
 - Regenerate Compose on every `dockerop start` so `/workspace` always points to the directory where `dockerop` is launched.
