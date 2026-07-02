@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.9
 
+- Make installers update PATH automatically when possible.
+- Add branded success output to shell and PowerShell installers.
 - Fix `dockerop shell` to bypass the OpenCode entrypoint and open a real container shell.
 
 ## 0.3.8

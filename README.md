@@ -135,11 +135,8 @@ Depuis ce dossier :
 ```
 
 Par defaut, la commande installe un lien symbolique dans `~/.local/bin/dockerop`.
-Si `~/.local/bin` n'est pas dans le `PATH`, ajoute-le :
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
+Si `~/.local/bin` n'est pas dans le `PATH`, l'installateur essaie de l'ajouter
+automatiquement a `~/.profile`, `~/.bashrc` ou `~/.zshrc`.
 
 Options :
 
@@ -157,6 +154,7 @@ Installateur shell equivalent :
 DOCKEROP_FORCE_INSTALL=1 ./install.sh
 DOCKEROP_INSTALL_MODE=copy ./install.sh
 DOCKEROP_INSTALL_DIR=/usr/local/bin ./install.sh
+DOCKEROP_UPDATE_PATH=0 ./install.sh
 ```
 
 Desinstallation :
