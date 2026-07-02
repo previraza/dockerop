@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix `dockerop shell` to bypass the OpenCode entrypoint and open a real container shell.
+
 ## 0.3.6
 
 - Add `dockerop shell` / `dockerop sh` to open a shell in the same container workspace without launching OpenCode.

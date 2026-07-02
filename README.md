@@ -83,6 +83,13 @@ dockerop shell ls -la
 ```
 
 Par defaut, `dockerop shell` ouvre `bash` si disponible, sinon `sh`.
+La commande force l'entrypoint Docker sur `sh`, donc elle n'appelle pas
+`opencode shell`.
+
+## Versioning
+
+Les petites corrections sont notees dans `Unreleased`. La version dans
+`VERSION` et `package.json` ne change qu'au moment d'une release preparee.
 
 ## Installation
 

@@ -350,13 +350,15 @@ def shell(args: argparse.Namespace) -> int:
         "--rm",
         "--workdir",
         "/workspace",
+        "--entrypoint",
+        "sh",
         "opencode",
     ]
     shell_command = getattr(args, "command", None)
     if shell_command:
-        run_command += shell_command
+        run_command += ["-lc", 'exec "$@"', "sh", *shell_command]
     else:
-        run_command += ["sh", "-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"]
+        run_command += ["-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"]
     return subprocess.call(run_command, cwd=root)
 
 
