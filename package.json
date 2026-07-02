@@ -1,0 +1,42 @@
+{
+  "name": "dockerop",
+  "version": "0.3.2",
+  "description": "Run OpenCode in an isolated Docker machine for the current project.",
+  "bin": {
+    "dockerop": "./dockerop"
+  },
+  "files": [
+    "dockerop",
+    "bootstrap.sh",
+    "install.sh",
+    "uninstall.sh",
+    "install.ps1",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "VERSION"
+  ],
+  "scripts": {
+    "check": "python3 -m py_compile dockerop && ./dockerop --help >/dev/null && ./dockerop --version >/dev/null"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/previraza/dockerop.git"
+  },
+  "keywords": [
+    "opencode",
+    "docker",
+    "cli",
+    "isolated",
+    "machine-id"
+  ],
+  "author": "previraza",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/previraza/dockerop/issues"
+  },
+  "homepage": "https://github.com/previraza/dockerop#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}

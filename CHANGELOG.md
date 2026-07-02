@@ -1,0 +1,34 @@
+# Changelog
+
+## 0.3.2
+
+- Add `dockerop use <method>` to switch between `image`, `npm` and `install-script` without changing `machine_id` or deleting state.
+- Document that `apt-get update` logs only happen in local build modes, not in the default image mode.
+- Add `bootstrap.sh` for direct installation from `previraza/dockerop`.
+- Add npm/pnpm GitHub installation metadata.
+- Add Windows PowerShell installer.
+
+## 0.3.1
+
+- Use the official OpenCode image by default to avoid local build steps.
+- Keep isolated machine identity through `.dockerop/state/machine-id:/etc/machine-id:ro`.
+- Keep local build methods available through `dockerop init --method install-script` and `dockerop init --method npm`.
+
+## 0.3.0
+
+- Default to a dockerop-controlled image built with the official OpenCode install script.
+- Keep `--method image` available, but not as the default, because dockerop prioritizes an isolated machine identity.
+- Add `DOCKEROP_INSTALL_METHOD` to generated Compose environments.
+
+## 0.2.0
+
+- Add lifecycle commands: `build`, `stop`, `reset`, `destroy`, `doctor`, `config`, `version`.
+- Add global installation through `dockerop install`.
+- Add launch banner with version, project, machine id, workspace and state path.
+- Remove `apt-get update` from the generated Dockerfile.
+- Generate `.dockerop/.gitignore` for local runtime state.
+
+## 0.1.0
+
+- Add initial `init` and `start` commands.
+- Generate `.dockerop/` with Docker Compose, Dockerfile and isolated state.
