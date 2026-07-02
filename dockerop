@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 
@@ -307,13 +307,7 @@ def print_banner(config: dict, root: Path) -> None:
 
 def start(args: argparse.Namespace) -> int:
     root = project_root()
-    if not config_path(root).exists():
-        init(argparse.Namespace(force=False, quiet=True))
-
-    config = load_config(root)
-    if sync_project_root(root, config):
-        save_config(root, config)
-    write_runtime_files(root, config, force=True)
+    config = prepare_runtime(root)
 
     if not getattr(args, "no_banner", False):
         print_banner(config, root)
@@ -330,6 +324,39 @@ def start(args: argparse.Namespace) -> int:
     override = getattr(args, "command", None)
     if override:
         run_command += override
+    return subprocess.call(run_command, cwd=root)
+
+
+def prepare_runtime(root: Path) -> dict:
+    if not config_path(root).exists():
+        init(argparse.Namespace(force=False, quiet=True))
+
+    config = load_config(root)
+    if sync_project_root(root, config):
+        save_config(root, config)
+    write_runtime_files(root, config, force=True)
+    return config
+
+
+def shell(args: argparse.Namespace) -> int:
+    root = project_root()
+    prepare_runtime(root)
+    compose_file = dockerop_dir(root) / "compose.yaml"
+    command = docker_compose_command()
+    run_command = command + [
+        "-f",
+        str(compose_file),
+        "run",
+        "--rm",
+        "--workdir",
+        "/workspace",
+        "opencode",
+    ]
+    shell_command = getattr(args, "command", None)
+    if shell_command:
+        run_command += shell_command
+    else:
+        run_command += ["sh", "-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"]
     return subprocess.call(run_command, cwd=root)
 
 
@@ -525,6 +552,14 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument("-s", "--session", help="start OpenCode with a session id")
     start_parser.add_argument("command", nargs=argparse.REMAINDER, help="optional command passed after opencode")
     start_parser.set_defaults(func=start)
+
+    shell_parser = subparsers.add_parser("shell", aliases=["sh"], help="open a shell in the dockerop container")
+    shell_parser.add_argument(
+        "command",
+        nargs=argparse.REMAINDER,
+        help="optional command to run instead of an interactive shell",
+    )
+    shell_parser.set_defaults(func=shell)
 
     build_parser_cmd = subparsers.add_parser("build", help="build the OpenCode Docker image")
     build_parser_cmd.set_defaults(func=build)

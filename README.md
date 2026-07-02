@@ -28,6 +28,8 @@ un usage script, utilise `dockerop start --no-banner`.
 dockerop start              # lance OpenCode dans Docker
 dockerop -s ses_xxxx        # lance OpenCode avec une session precise
 dockerop start -s ses_xxxx  # equivalent explicite
+dockerop shell              # ouvre bash dans le conteneur
+dockerop sh                 # alias de shell
 dockerop start --no-banner  # lance sans presentation
 dockerop init               # cree .dockerop/
 dockerop init --method install-script # image locale avec install officiel
@@ -70,6 +72,17 @@ Pour reprendre/reinitialiser une session OpenCode precise :
 dockerop -s ses_xxxx
 dockerop start -s ses_xxxx
 ```
+
+Pour ouvrir un shell dans le conteneur sans lancer OpenCode :
+
+```bash
+dockerop shell
+dockerop sh
+dockerop shell sh
+dockerop shell ls -la
+```
+
+Par defaut, `dockerop shell` ouvre `bash` si disponible, sinon `sh`.
 
 ## Installation
 

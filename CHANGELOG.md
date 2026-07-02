@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.6
+
+- Add `dockerop shell` / `dockerop sh` to open a shell in the same container workspace without launching OpenCode.
+
 ## 0.3.5
 
 - Add `dockerop -s <session>` and `dockerop start -s <session>` to launch OpenCode with a session id.
