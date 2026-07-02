@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.2"
+VERSION = "0.3.3"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 
@@ -136,6 +136,7 @@ def compose(config: dict) -> str:
     uid = os.getuid()
     gid = os.getgid()
     method = config.get("install_method", DEFAULT_INSTALL_METHOD)
+    project_root_path = config["project_root"]
     lines = [
         "services:",
         "  opencode:",
@@ -170,7 +171,7 @@ def compose(config: dict) -> str:
             "      XDG_CACHE_HOME: /home/opencode/.cache",
             "      XDG_DATA_HOME: /home/opencode/.local/share",
             "    volumes:",
-            "      - ..:/workspace",
+            f"      - {project_root_path}:/workspace",
             "      - ./state/home:/home/opencode",
             "      - ./state/config:/home/opencode/.config",
             "      - ./state/cache:/home/opencode/.cache",
@@ -306,7 +307,7 @@ def start(args: argparse.Namespace) -> int:
 
     compose_file = dockerop_dir(root) / "compose.yaml"
     command = docker_compose_command()
-    run_command = command + ["-f", str(compose_file), "run", "--rm"]
+    run_command = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
     if getattr(args, "no_build", False):
         run_command.append("--no-build")
     run_command.append("opencode")

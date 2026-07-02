@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3
+
+- Mount the project root into `/workspace` with an absolute host path.
+- Force `docker compose run` to use `/workspace` as working directory.
+
 ## 0.3.2
 
 - Add `dockerop use <method>` to switch between `image`, `npm` and `install-script` without changing `machine_id` or deleting state.

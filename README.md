@@ -147,6 +147,10 @@ pnpm remove -g dockerop
 Le projet courant est monte dans le conteneur sous `/workspace`. Le conteneur ne
 monte pas le dossier parent du projet.
 
+Le montage utilise le chemin absolu du dossier ou `dockerop` est lance. Donc si
+tu lances `dockerop` dans un projet Next.js, `ls` dans OpenCode doit voir les
+fichiers de ce projet, pas le dossier `.dockerop/`.
+
 ## Git
 
 `dockerop init` ajoute automatiquement `.dockerop/` au `.gitignore` du projet
