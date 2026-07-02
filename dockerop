@@ -13,9 +13,10 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.6"
+VERSION = "0.3.7"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
+DEFAULT_NETWORK_MODE = "bridge"
 
 
 def project_root() -> Path:
@@ -155,6 +156,9 @@ def compose(config: dict) -> str:
                 f"    image: {config['image_name']}",
             ]
         )
+    network_mode = config.get("network_mode", DEFAULT_NETWORK_MODE)
+    if network_mode != "bridge":
+        lines.append(f"    network_mode: {network_mode}")
     lines.extend(
         [
             f"    container_name: {config['container_name']}",
@@ -165,6 +169,7 @@ def compose(config: dict) -> str:
             "    environment:",
             '      DOCKEROP: "1"',
             f'      DOCKEROP_INSTALL_METHOD: "{method}"',
+            f'      DOCKEROP_NETWORK_MODE: "{network_mode}"',
             f'      DOCKEROP_MACHINE_ID: "{config["machine_id"]}"',
             "      HOME: /home/opencode",
             "      XDG_CONFIG_HOME: /home/opencode/.config",
@@ -250,12 +255,14 @@ def init(args: argparse.Namespace) -> int:
             "project_id": project_id,
             "machine_id": random_machine_id(),
             "install_method": install_method(args),
+            "network_mode": DEFAULT_NETWORK_MODE,
             "opencode_image": DEFAULT_OPENCODE_IMAGE,
             "image_name": f"dockerop-opencode-{project_id}",
             "container_name": f"dockerop-{project_name}-{project_id[:8]}",
         }
         save_config(root, config)
     config.setdefault("install_method", DEFAULT_INSTALL_METHOD)
+    config.setdefault("network_mode", DEFAULT_NETWORK_MODE)
     config.setdefault("opencode_image", DEFAULT_OPENCODE_IMAGE)
 
     machine_id_path = state_dir / "machine-id"
@@ -340,6 +347,13 @@ def prepare_runtime(root: Path) -> dict:
 
 def shell(args: argparse.Namespace) -> int:
     root = project_root()
+    shell_command = getattr(args, "command", None)
+    if shell_command:
+        return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
+    return shell_run(root, "-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh")
+
+
+def shell_run(root: Path, *args: str) -> int:
     prepare_runtime(root)
     compose_file = dockerop_dir(root) / "compose.yaml"
     command = docker_compose_command()
@@ -353,12 +367,8 @@ def shell(args: argparse.Namespace) -> int:
         "--entrypoint",
         "sh",
         "opencode",
+        *args,
     ]
-    shell_command = getattr(args, "command", None)
-    if shell_command:
-        run_command += ["-lc", 'exec "$@"', "sh", *shell_command]
-    else:
-        run_command += ["-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh"]
     return subprocess.call(run_command, cwd=root)
 
 
@@ -383,6 +393,7 @@ def status(args: argparse.Namespace) -> int:
     print(f"root:         {config['project_root']}")
     print(f"machine_id:   {config['machine_id']}")
     print(f"method:       {config.get('install_method', 'image')}")
+    print(f"network:      {config.get('network_mode', DEFAULT_NETWORK_MODE)}")
     print(f"image:        {display_image(config)}")
     print(f"container:    {config['container_name']}")
     print(f"state:        {state_dir}")
@@ -413,6 +424,34 @@ def use_method(args: argparse.Namespace) -> int:
     print(f"method: {old_method} -> {args.method}")
     print(f"machine_id preserved: {config['machine_id']}")
     return 0
+
+
+def network(args: argparse.Namespace) -> int:
+    root = project_root()
+    config = require_initialized(root)
+    old_mode = config.get("network_mode", DEFAULT_NETWORK_MODE)
+    config["network_mode"] = args.mode
+    save_config(root, config)
+    write_runtime_files(root, config, force=True)
+    print(f"network: {old_mode} -> {args.mode}")
+    if args.mode == "host":
+        print("host network works on Linux Docker hosts")
+    return 0
+
+
+def netcheck(_: argparse.Namespace) -> int:
+    root = project_root()
+    script = (
+        "set -u; "
+        "echo network_mode=${DOCKEROP_NETWORK_MODE:-unknown}; "
+        "echo machine_id=$(cat /etc/machine-id 2>/dev/null || true); "
+        "echo; echo resolv.conf:; cat /etc/resolv.conf; "
+        "echo; echo dns github.com:; "
+        "(getent hosts github.com || nslookup github.com || true); "
+        "echo; echo https github.com:; "
+        "(wget -S --spider https://github.com 2>&1 || curl -I https://github.com || true)"
+    )
+    return shell_run(root, "-lc", script)
 
 
 def stop(_: argparse.Namespace) -> int:
@@ -569,6 +608,13 @@ def build_parser() -> argparse.ArgumentParser:
     use_parser = subparsers.add_parser("use", help="switch OpenCode install method without resetting state")
     use_parser.add_argument("method", choices=("image", "npm", "install-script"))
     use_parser.set_defaults(func=use_method)
+
+    network_parser = subparsers.add_parser("network", help="switch Docker network mode")
+    network_parser.add_argument("mode", choices=("bridge", "host"))
+    network_parser.set_defaults(func=network)
+
+    netcheck_parser = subparsers.add_parser("netcheck", help="check DNS and HTTPS from the container")
+    netcheck_parser.set_defaults(func=netcheck)
 
     stop_parser = subparsers.add_parser("stop", aliases=["down"], help="stop Docker resources without deleting state")
     stop_parser.set_defaults(func=stop)

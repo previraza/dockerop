@@ -4,6 +4,11 @@
 
 - Fix `dockerop shell` to bypass the OpenCode entrypoint and open a real container shell.
 
+## 0.3.7
+
+- Add `dockerop netcheck` to test DNS and HTTPS from inside the container.
+- Add `dockerop network bridge|host` to switch Docker network mode.
+
 ## 0.3.6
 
 - Add `dockerop shell` / `dockerop sh` to open a shell in the same container workspace without launching OpenCode.
