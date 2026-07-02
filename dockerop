@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.7"
+VERSION = "0.3.8"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -427,31 +427,88 @@ def use_method(args: argparse.Namespace) -> int:
 
 
 def network(args: argparse.Namespace) -> int:
-    root = project_root()
-    config = require_initialized(root)
-    old_mode = config.get("network_mode", DEFAULT_NETWORK_MODE)
-    config["network_mode"] = args.mode
-    save_config(root, config)
-    write_runtime_files(root, config, force=True)
-    print(f"network: {old_mode} -> {args.mode}")
-    if args.mode == "host":
-        print("host network works on Linux Docker hosts")
+    if args.mode == "auto":
+        return network_auto(args)
+    set_network_mode(args.mode)
     return 0
 
 
-def netcheck(_: argparse.Namespace) -> int:
+def set_network_mode(mode: str) -> None:
     root = project_root()
-    script = (
-        "set -u; "
-        "echo network_mode=${DOCKEROP_NETWORK_MODE:-unknown}; "
-        "echo machine_id=$(cat /etc/machine-id 2>/dev/null || true); "
-        "echo; echo resolv.conf:; cat /etc/resolv.conf; "
-        "echo; echo dns github.com:; "
-        "(getent hosts github.com || nslookup github.com || true); "
-        "echo; echo https github.com:; "
-        "(wget -S --spider https://github.com 2>&1 || curl -I https://github.com || true)"
-    )
+    config = require_initialized(root)
+    old_mode = config.get("network_mode", DEFAULT_NETWORK_MODE)
+    config["network_mode"] = mode
+    save_config(root, config)
+    write_runtime_files(root, config, force=True)
+    print(f"network: {old_mode} -> {mode}")
+    if mode == "host":
+        print("host network works on Linux Docker hosts")
+
+
+def network_auto(_: argparse.Namespace) -> int:
+    root = project_root()
+    require_initialized(root)
+    print("checking bridge network...")
+    set_network_mode("bridge")
+    if run_netcheck(root) == 0:
+        print("bridge network works")
+        return 0
+
+    if sys.platform.startswith("linux"):
+        print("bridge failed; trying host network...")
+        set_network_mode("host")
+        if run_netcheck(root) == 0:
+            print("host network works; keeping network_mode=host")
+            return 0
+
+    print("network check failed")
+    print("host firewall, Docker daemon networking, or provider rules may block container egress")
+    return 1
+
+
+def netcheck(_: argparse.Namespace) -> int:
+    return run_netcheck(project_root())
+
+
+def run_netcheck(root: Path) -> int:
+    script = netcheck_script()
     return shell_run(root, "-lc", script)
+
+
+def netcheck_script() -> str:
+    return textwrap.dedent(
+        """\
+        set -u
+        echo "network_mode=${DOCKEROP_NETWORK_MODE:-unknown}"
+        echo "machine_id=$(cat /etc/machine-id 2>/dev/null || true)"
+        echo
+        echo "resolv.conf:"
+        cat /etc/resolv.conf
+        echo
+        echo "dns github.com:"
+        if command -v getent >/dev/null 2>&1; then
+          getent hosts github.com || true
+        elif command -v nslookup >/dev/null 2>&1; then
+          nslookup github.com || true
+        else
+          echo "no dns lookup tool available"
+        fi
+        echo
+        echo "https github.com:"
+        if command -v wget >/dev/null 2>&1; then
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 12 wget -T 8 -S --spider https://github.com 2>&1
+          else
+            wget -T 8 -S --spider https://github.com 2>&1
+          fi
+        elif command -v curl >/dev/null 2>&1; then
+          curl --connect-timeout 8 --max-time 12 -I https://github.com
+        else
+          echo "no wget or curl available"
+          exit 2
+        fi
+        """
+    )
 
 
 def stop(_: argparse.Namespace) -> int:
@@ -610,7 +667,7 @@ def build_parser() -> argparse.ArgumentParser:
     use_parser.set_defaults(func=use_method)
 
     network_parser = subparsers.add_parser("network", help="switch Docker network mode")
-    network_parser.add_argument("mode", choices=("bridge", "host"))
+    network_parser.add_argument("mode", choices=("bridge", "host", "auto"))
     network_parser.set_defaults(func=network)
 
     netcheck_parser = subparsers.add_parser("netcheck", help="check DNS and HTTPS from the container")

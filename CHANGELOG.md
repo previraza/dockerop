@@ -4,6 +4,11 @@
 
 - Fix `dockerop shell` to bypass the OpenCode entrypoint and open a real container shell.
 
+## 0.3.8
+
+- Add timeouts to `dockerop netcheck` so blocked container egress fails quickly.
+- Add `dockerop network auto` to try bridge first, then host networking on Linux.
+
 ## 0.3.7
 
 - Add `dockerop netcheck` to test DNS and HTTPS from inside the container.

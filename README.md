@@ -41,6 +41,7 @@ dockerop status             # affiche le projet, machine_id et state
 dockerop config             # affiche la config Docker Compose resolue
 dockerop doctor             # verifie Docker et la config
 dockerop netcheck           # teste DNS/HTTPS depuis le conteneur
+dockerop network auto       # essaie bridge puis host sur Linux
 dockerop network host       # utilise le reseau hote Linux
 dockerop network bridge     # revient au reseau Docker par defaut
 dockerop stop               # arrete les ressources Docker
@@ -232,7 +233,8 @@ Makefile       raccourcis install/uninstall/check
 - Le mode par defaut est `image`, donc Docker tire `ghcr.io/anomalyco/opencode` sans build local.
 - Le `machine_id` reste isole car `.dockerop/state/machine-id` est monte sur `/etc/machine-id:ro`.
 - `ping` peut etre bloque meme si HTTPS fonctionne; utilise `dockerop netcheck` pour tester DNS et HTTPS.
-- Si le bridge Docker n'a pas Internet sur Linux, essaie `dockerop network host`, puis `dockerop netcheck`.
+- Si le bridge Docker n'a pas Internet sur Linux, lance `dockerop network auto`.
+- Tu peux aussi forcer manuellement avec `dockerop network host`, puis `dockerop netcheck`.
 - Si tu vois `RUN apt-get update`, le projet est encore en mode `install-script`; lance `dockerop use image`.
 - `dockerop init --method install-script` construit une image locale et installe OpenCode avec `curl -fsSL https://opencode.ai/install | bash`.
 - `dockerop init --method npm` reste disponible si tu veux comparer avec `npm install -g opencode-ai`.
