@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4
+
+- Regenerate Compose on every `dockerop start` so `/workspace` always points to the directory where `dockerop` is launched.
+- Update stored `project_root` automatically when a project directory is moved.
+
 ## 0.3.3
 
 - Mount the project root into `/workspace` with an absolute host path.

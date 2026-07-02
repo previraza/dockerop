@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 
@@ -204,6 +204,15 @@ def display_image(config: dict) -> str:
     return config["image_name"]
 
 
+def sync_project_root(root: Path, config: dict) -> bool:
+    current_root = str(root)
+    if config.get("project_root") == current_root:
+        return False
+    config["project_root"] = current_root
+    config["project_name"] = slug(root.name)
+    return True
+
+
 def save_config(root: Path, config: dict) -> None:
     config_path(root).write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
@@ -302,6 +311,10 @@ def start(args: argparse.Namespace) -> int:
         init(argparse.Namespace(force=False, quiet=True))
 
     config = load_config(root)
+    if sync_project_root(root, config):
+        save_config(root, config)
+    write_runtime_files(root, config, force=True)
+
     if not getattr(args, "no_banner", False):
         print_banner(config, root)
 
@@ -341,6 +354,7 @@ def status(args: argparse.Namespace) -> int:
     print(f"image:        {display_image(config)}")
     print(f"container:    {config['container_name']}")
     print(f"state:        {state_dir}")
+    print("container_cwd:/workspace")
     return 0
 
 

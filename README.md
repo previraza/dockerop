@@ -151,6 +151,13 @@ Le montage utilise le chemin absolu du dossier ou `dockerop` est lance. Donc si
 tu lances `dockerop` dans un projet Next.js, `ls` dans OpenCode doit voir les
 fichiers de ce projet, pas le dossier `.dockerop/`.
 
+Ce n'est pas un clone Git : Docker monte le dossier courant en bind mount
+lecture/ecriture. Les fichiers restent sur l'hote et OpenCode peut les lire,
+modifier et creer directement depuis le conteneur.
+
+A chaque `dockerop start`, `compose.yaml` est regenere avec le `pwd` courant.
+Si tu deplaces un projet, `dockerop` met aussi `project_root` a jour.
+
 ## Git
 
 `dockerop init` ajoute automatiquement `.dockerop/` au `.gitignore` du projet
