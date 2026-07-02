@@ -1,6 +1,6 @@
 {
   "name": "dockerop",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Run OpenCode in an isolated Docker machine for the current project.",
   "bin": {
     "dockerop": "./dockerop"

@@ -44,6 +44,8 @@ dockerop netcheck           # teste DNS/HTTPS depuis le conteneur
 dockerop network auto       # essaie bridge puis host sur Linux
 dockerop network host       # utilise le reseau hote Linux
 dockerop network bridge     # revient au reseau Docker par defaut
+dockerop sessions host      # partage les sessions OpenCode de l'hote
+dockerop sessions isolated  # revient aux sessions isolees dans .dockerop/
 dockerop stop               # arrete les ressources Docker
 dockerop reset --yes        # vide state/ en gardant config et machine_id
 dockerop destroy --yes      # supprime .dockerop/
@@ -75,6 +77,27 @@ Pour reprendre/reinitialiser une session OpenCode precise :
 ```bash
 dockerop -s ses_xxxx
 dockerop start -s ses_xxxx
+```
+
+Pour reprendre dans Docker les sessions commencees hors Docker :
+
+```bash
+dockerop sessions host
+dockerop -s ses_xxxx
+```
+
+Ce mode monte les dossiers OpenCode de l'hote :
+
+```text
+~/.config/opencode -> /home/opencode/.config/opencode
+~/.local/share/opencode -> /home/opencode/.local/share/opencode
+~/.cache/opencode -> /home/opencode/.cache/opencode
+```
+
+Pour revenir a une instance completement isolee :
+
+```bash
+dockerop sessions isolated
 ```
 
 Pour ouvrir un shell dans le conteneur sans lancer OpenCode :

@@ -13,10 +13,11 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.9"
+VERSION = "0.3.10"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
+DEFAULT_SESSION_MODE = "isolated"
 
 
 def project_root() -> Path:
@@ -137,7 +138,16 @@ def compose(config: dict) -> str:
     uid = os.getuid()
     gid = os.getgid()
     method = config.get("install_method", DEFAULT_INSTALL_METHOD)
+    session_mode = config.get("session_mode", DEFAULT_SESSION_MODE)
     project_root_path = config["project_root"]
+    if session_mode == "host":
+        config_mount = f"{Path.home() / '.config' / 'opencode'}:/home/opencode/.config/opencode"
+        data_mount = f"{Path.home() / '.local' / 'share' / 'opencode'}:/home/opencode/.local/share/opencode"
+        cache_mount = f"{Path.home() / '.cache' / 'opencode'}:/home/opencode/.cache/opencode"
+    else:
+        config_mount = "./state/config:/home/opencode/.config"
+        data_mount = "./state/data:/home/opencode/.local/share"
+        cache_mount = "./state/cache:/home/opencode/.cache"
     lines = [
         "services:",
         "  opencode:",
@@ -170,6 +180,7 @@ def compose(config: dict) -> str:
             '      DOCKEROP: "1"',
             f'      DOCKEROP_INSTALL_METHOD: "{method}"',
             f'      DOCKEROP_NETWORK_MODE: "{network_mode}"',
+            f'      DOCKEROP_SESSION_MODE: "{session_mode}"',
             f'      DOCKEROP_MACHINE_ID: "{config["machine_id"]}"',
             "      HOME: /home/opencode",
             "      XDG_CONFIG_HOME: /home/opencode/.config",
@@ -178,9 +189,9 @@ def compose(config: dict) -> str:
             "    volumes:",
             f"      - {project_root_path}:/workspace",
             "      - ./state/home:/home/opencode",
-            "      - ./state/config:/home/opencode/.config",
-            "      - ./state/cache:/home/opencode/.cache",
-            "      - ./state/data:/home/opencode/.local/share",
+            f"      - {config_mount}",
+            f"      - {cache_mount}",
+            f"      - {data_mount}",
             "      - ./state/npm:/home/opencode/.npm",
             "      - ./state/machine-id:/etc/machine-id:ro",
         ]
@@ -224,6 +235,13 @@ def save_config(root: Path, config: dict) -> None:
 
 def write_runtime_files(root: Path, config: dict, force: bool) -> None:
     app_dir = dockerop_dir(root)
+    if config.get("session_mode", DEFAULT_SESSION_MODE) == "host":
+        for path in (
+            Path.home() / ".config" / "opencode",
+            Path.home() / ".local" / "share" / "opencode",
+            Path.home() / ".cache" / "opencode",
+        ):
+            path.mkdir(parents=True, exist_ok=True)
     dockerfile_path = app_dir / "Dockerfile"
     if config["install_method"] == "image":
         if dockerfile_path.exists():
@@ -256,6 +274,7 @@ def init(args: argparse.Namespace) -> int:
             "machine_id": random_machine_id(),
             "install_method": install_method(args),
             "network_mode": DEFAULT_NETWORK_MODE,
+            "session_mode": DEFAULT_SESSION_MODE,
             "opencode_image": DEFAULT_OPENCODE_IMAGE,
             "image_name": f"dockerop-opencode-{project_id}",
             "container_name": f"dockerop-{project_name}-{project_id[:8]}",
@@ -263,6 +282,7 @@ def init(args: argparse.Namespace) -> int:
         save_config(root, config)
     config.setdefault("install_method", DEFAULT_INSTALL_METHOD)
     config.setdefault("network_mode", DEFAULT_NETWORK_MODE)
+    config.setdefault("session_mode", DEFAULT_SESSION_MODE)
     config.setdefault("opencode_image", DEFAULT_OPENCODE_IMAGE)
 
     machine_id_path = state_dir / "machine-id"
@@ -394,6 +414,7 @@ def status(args: argparse.Namespace) -> int:
     print(f"machine_id:   {config['machine_id']}")
     print(f"method:       {config.get('install_method', 'image')}")
     print(f"network:      {config.get('network_mode', DEFAULT_NETWORK_MODE)}")
+    print(f"sessions:     {config.get('session_mode', DEFAULT_SESSION_MODE)}")
     print(f"image:        {display_image(config)}")
     print(f"container:    {config['container_name']}")
     print(f"state:        {state_dir}")
@@ -464,6 +485,20 @@ def network_auto(_: argparse.Namespace) -> int:
     print("network check failed")
     print("host firewall, Docker daemon networking, or provider rules may block container egress")
     return 1
+
+
+def sessions(args: argparse.Namespace) -> int:
+    root = project_root()
+    config = require_initialized(root)
+    old_mode = config.get("session_mode", DEFAULT_SESSION_MODE)
+    config["session_mode"] = args.mode
+    save_config(root, config)
+    write_runtime_files(root, config, force=True)
+    print(f"sessions: {old_mode} -> {args.mode}")
+    if args.mode == "host":
+        print(f"host config: {Path.home() / '.config' / 'opencode'}")
+        print(f"host data:   {Path.home() / '.local' / 'share' / 'opencode'}")
+    return 0
 
 
 def netcheck(_: argparse.Namespace) -> int:
@@ -669,6 +704,10 @@ def build_parser() -> argparse.ArgumentParser:
     network_parser = subparsers.add_parser("network", help="switch Docker network mode")
     network_parser.add_argument("mode", choices=("bridge", "host", "auto"))
     network_parser.set_defaults(func=network)
+
+    sessions_parser = subparsers.add_parser("sessions", help="switch OpenCode session storage")
+    sessions_parser.add_argument("mode", choices=("isolated", "host"))
+    sessions_parser.set_defaults(func=sessions)
 
     netcheck_parser = subparsers.add_parser("netcheck", help="check DNS and HTTPS from the container")
     netcheck_parser.set_defaults(func=netcheck)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.10
+
+- Add `dockerop sessions host|isolated` to share or isolate OpenCode host sessions.
+
 ## 0.3.9
 
 - Make installers update PATH automatically when possible.
