@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.11
+
+- Fix Windows startup by avoiding `os.getuid()` / `os.getgid()` when unavailable.
+- Generate Docker Compose bind mounts with long syntax for Windows path compatibility.
+
 ## 0.3.10
 
 - Add `dockerop sessions host|isolated` to share or isolate OpenCode host sessions.

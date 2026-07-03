@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.3.10"
+VERSION = "0.3.11"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -44,6 +44,16 @@ def slug(value: str) -> str:
 
 def random_machine_id() -> str:
     return secrets.token_hex(16)
+
+
+def host_ids() -> tuple[int | None, int | None]:
+    if hasattr(os, "getuid") and hasattr(os, "getgid"):
+        return os.getuid(), os.getgid()
+    return None, None
+
+
+def yaml_quote(value: str | Path) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
 
 
 def load_config(root: Path) -> dict:
@@ -135,8 +145,7 @@ def dockerfile(method: str) -> str:
 
 
 def compose(config: dict) -> str:
-    uid = os.getuid()
-    gid = os.getgid()
+    uid, gid = host_ids()
     method = config.get("install_method", DEFAULT_INSTALL_METHOD)
     session_mode = config.get("session_mode", DEFAULT_SESSION_MODE)
     project_root_path = config["project_root"]
@@ -160,12 +169,15 @@ def compose(config: dict) -> str:
                 "    build:",
                 "      context: .",
                 "      dockerfile: Dockerfile",
-                "      args:",
-                f'        USER_ID: "{uid}"',
-                f'        GROUP_ID: "{gid}"',
                 f"    image: {config['image_name']}",
             ]
         )
+        if uid is not None and gid is not None:
+            lines[lines.index("    image: " + config["image_name"]):lines.index("    image: " + config["image_name"])] = [
+                "      args:",
+                f'        USER_ID: "{uid}"',
+                f'        GROUP_ID: "{gid}"',
+            ]
     network_mode = config.get("network_mode", DEFAULT_NETWORK_MODE)
     if network_mode != "bridge":
         lines.append(f"    network_mode: {network_mode}")
@@ -173,7 +185,6 @@ def compose(config: dict) -> str:
         [
             f"    container_name: {config['container_name']}",
             "    working_dir: /workspace",
-            f'    user: "{uid}:{gid}"',
             "    stdin_open: true",
             "    tty: true",
             "    environment:",
@@ -187,16 +198,37 @@ def compose(config: dict) -> str:
             "      XDG_CACHE_HOME: /home/opencode/.cache",
             "      XDG_DATA_HOME: /home/opencode/.local/share",
             "    volumes:",
-            f"      - {project_root_path}:/workspace",
-            "      - ./state/home:/home/opencode",
-            f"      - {config_mount}",
-            f"      - {cache_mount}",
-            f"      - {data_mount}",
-            "      - ./state/npm:/home/opencode/.npm",
-            "      - ./state/machine-id:/etc/machine-id:ro",
+            "      - type: bind",
+            f"        source: {yaml_quote(project_root_path)}",
+            "        target: /workspace",
+            "      - type: bind",
+            "        source: './state/home'",
+            "        target: /home/opencode",
+            *volume_mount(config_mount),
+            *volume_mount(cache_mount),
+            *volume_mount(data_mount),
+            "      - type: bind",
+            "        source: './state/npm'",
+            "        target: /home/opencode/.npm",
+            "      - type: bind",
+            "        source: './state/machine-id'",
+            "        target: /etc/machine-id",
+            "        read_only: true",
         ]
     )
+    if uid is not None and gid is not None:
+        insert_at = lines.index("    stdin_open: true")
+        lines.insert(insert_at, f'    user: "{uid}:{gid}"')
     return "\n".join(lines) + "\n"
+
+
+def volume_mount(short_mount: str) -> list[str]:
+    source, target = short_mount.rsplit(":", 1)
+    return [
+        "      - type: bind",
+        f"        source: {yaml_quote(source)}",
+        f"        target: {target}",
+    ]
 
 
 def info(message: str, quiet: bool = False) -> None:

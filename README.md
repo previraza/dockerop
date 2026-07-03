@@ -1,5 +1,16 @@
 # dockerop
 
+```text
+  _            _
+ | |          | |
+ __| | ___   ___| | _____ _ __ ___  _ __
+ / _` |/ _ \ / __| |/ / _ \ '__/ _ \| '_ \
+| (_| | (_) | (__|   <  __/ | | (_) | |_) |
+ \__,_|\___/ \___|_|\_\___|_|  \___/| .__/
+                                     | |
+                                     |_|
+```
+
 `dockerop` lance OpenCode dans un conteneur Docker isole pour le dossier courant.
 
 Le but est d'avoir une instance OpenCode separee par projet, avec un `machine_id`
