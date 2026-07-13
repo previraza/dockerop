@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+
+- Support splitting single command arguments containing spaces with `shlex.split`.
+
 ## 0.6.5
 
 - Fix missing `socket` import that prevented daemon health check from working.
