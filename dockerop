@@ -17,7 +17,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.5.2"
+VERSION = "0.5.3"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -697,7 +697,7 @@ def run_command(args: argparse.Namespace) -> int:
     cmd = getattr(args, "command", None)
     if config.get("uppershell_enabled") and cmd:
         run_args += ["--entrypoint", "sh", "opencode", "-c",
-                      f'{US_INIT} && exec {shlex.quote(" ".join(cmd))}']
+                      f'{US_INIT} && exec sh -c {shlex.quote(" ".join(cmd))}']
     elif cmd:
         run_args += ["opencode"] + cmd
     else:

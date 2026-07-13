@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3
+
+- Fix `run` command: parse quoted strings via `sh -c`.
+
 ## 0.5.2
 
 - Add python3 to Dockerfile packages for uppershell support.
