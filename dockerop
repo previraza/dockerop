@@ -232,7 +232,7 @@ def compose(config: dict) -> str:
             "        target: /var/run/uppershelld.sock",
             "      - type: bind",
             f"        source: {yaml_quote(uppershell_dir / 'python-ref' / 'uppershell-client.py')}",
-            "        target: /usr/local/bin/uppershell",
+            "        target: /usr/local/lib/uppershell/client.py",
         ])
     for vol in config.get("extra_volumes", []):
         parts = vol.split(":")
@@ -465,13 +465,24 @@ def prepare_runtime(root: Path) -> dict:
     return config
 
 
+US_WRAPPER = (
+    'printf \'#!/bin/sh\\nexec python3 /usr/local/lib/uppershell/client.py "$@"\\n\' '
+    '> /tmp/uppershell && chmod +x /tmp/uppershell && export PATH="/tmp:$PATH"'
+)
+
+
 def shell(args: argparse.Namespace) -> int:
     root = project_root()
     config = require_initialized(root)
     apply_run_flags(args, config, root)
+    us = config.get("uppershell_enabled")
     shell_command = getattr(args, "command", None)
     if shell_command:
+        if us:
+            return shell_run(root, "-c", f'{US_WRAPPER} && exec "$@"', "sh", *shell_command)
         return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
+    if us:
+        return shell_run(root, "-c", f'{US_WRAPPER} && exec bash')
     return shell_run(root, "-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh")
 
 
@@ -674,8 +685,13 @@ def run_command(args: argparse.Namespace) -> int:
     command = docker_compose_command()
     run_args = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
     cmd = getattr(args, "command", None)
-    if cmd:
-        run_args += cmd
+    if config.get("uppershell_enabled") and cmd:
+        run_args += ["--entrypoint", "sh", "opencode", "-c",
+                      f'{US_WRAPPER} && exec "$@"', "sh", *cmd]
+    elif cmd:
+        run_args += ["opencode"] + cmd
+    else:
+        run_args += ["opencode"]
     return subprocess.call(run_args, cwd=root)
 
 
