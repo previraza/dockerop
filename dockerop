@@ -16,7 +16,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.4.1"
+VERSION = "0.4.2"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -225,10 +225,19 @@ def compose(config: dict) -> str:
     )
     if config.get("uppershell_enabled"):
         us_socket = config.get("uppershell_socket", DEFAULT_UPPERSHELL_SOCKET_PROJECT)
+        uppershell_dir = Path(__file__).resolve().parent / "uppershell"
         lines.extend([
             "      - type: bind",
             f"        source: {yaml_quote(us_socket)}",
             "        target: /var/run/uppershelld.sock",
+            "      - type: bind",
+            f"        source: {yaml_quote(uppershell_dir / 'uppershell')}",
+            "        target: /usr/local/bin/uppershell",
+            "        read_only: true",
+            "      - type: bind",
+            f"        source: {yaml_quote(uppershell_dir / 'python-ref' / 'uppershell-client.py')}",
+            "        target: /usr/local/bin/.uppershell-client.py",
+            "        read_only: true",
         ])
     if uid is not None and gid is not None:
         insert_at = lines.index("    stdin_open: true")

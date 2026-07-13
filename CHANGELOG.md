@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+
+- Mount uppershell client and wrapper into container when using `-us`, so `uppershell <cmd>` works out of the box.
+
 ## 0.4.1
 
 - Add `-us` / `--uppershell` flag to `dockerop shell`.
