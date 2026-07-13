@@ -19,6 +19,10 @@ DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
 DEFAULT_SESSION_MODE = "isolated"
 
+# Uppershell defaults
+DEFAULT_UPPERSHELL_SOCKET_PROJECT = "./state/uppershelld.sock"
+DEFAULT_UPPERSHELL_SOCKET_SYSTEM = "/run/uppershelld.sock"
+
 
 def project_root() -> Path:
     return Path.cwd().resolve()
