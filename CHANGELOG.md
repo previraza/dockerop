@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Change default install method to `install-script` (includes python3 for uppershell support).
+
 ## 0.5.3
 
 - Fix `run` command: parse quoted strings via `sh -c`.
