@@ -419,6 +419,13 @@ def prepare_runtime(root: Path) -> dict:
 
 def shell(args: argparse.Namespace) -> int:
     root = project_root()
+    if getattr(args, "uppershell", False):
+        config = require_initialized(root)
+        config["uppershell_enabled"] = True
+        us_socket = str(dockerop_dir(root) / DEFAULT_UPPERSHELL_SOCKET_PROJECT.lstrip("./"))
+        config.setdefault("uppershell_socket", us_socket)
+        save_config(root, config)
+        write_runtime_files(root, config, force=True)
     shell_command = getattr(args, "command", None)
     if shell_command:
         return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
@@ -811,6 +818,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.set_defaults(func=start)
 
     shell_parser = subparsers.add_parser("shell", aliases=["sh"], help="open a shell in the dockerop container")
+    shell_parser.add_argument("-us", "--uppershell", action="store_true", help="mount UpperShell socket into the container")
     shell_parser.add_argument(
         "command",
         nargs=argparse.REMAINDER,
