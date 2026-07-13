@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.5
+
+- Fix missing `socket` import that prevented daemon health check from working.
+- Fix daemon log file always being empty (kept file handle open until daemon confirmed started).
+- Handle stale socket directory artifacts with `shutil.rmtree`.
+
 ## 0.6.4
 
 - Auto-start uppershelld daemon when -us/--uppershell flag is used.
