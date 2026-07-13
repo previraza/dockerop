@@ -20,7 +20,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.6.7"
+VERSION = "0.6.8"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "install-script"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -337,6 +337,7 @@ def dockerfile(method: str) -> str:
         "ENV XDG_CONFIG_HOME=/home/opencode/.config",
         "ENV XDG_CACHE_HOME=/home/opencode/.cache",
         "ENV XDG_DATA_HOME=/home/opencode/.local/share",
+        "ENV PATH=\"/root/.opencode/bin:$PATH\"",
         "",
         'CMD ["opencode"]',
     ]

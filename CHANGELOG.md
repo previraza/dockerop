@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.8
+
+- Fix OCI runtime error by adding correct opencode path to container PATH environment variable.
+
 ## 0.6.7
 
 - Fix regression in command argument handling that prevented default execution.
