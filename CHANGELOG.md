@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4
+
+- Auto-start uppershelld daemon when -us/--uppershell flag is used.
+- Fix daemon permissions: use YAML list format for allowlist groups.
+- Daemon gracefully handles non-existent cwd from container.
+- Fix --version flag not being consumed by subcommand arguments.
+- Fix -- separator from argparse REMAINDER being passed as command arg.
+
 ## 0.6.3
 
 - Embed uppershell client in dockerop script (no external file dependency).

@@ -6,9 +6,11 @@ import os
 import secrets
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import textwrap
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -17,7 +19,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "install-script"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -77,6 +79,141 @@ def main():
     if resp.get("stderr"): sys.stderr.write(resp["stderr"])
     sys.exit(resp.get("exitCode", 1))
 if __name__ == "__main__": main()
+'''
+
+UPPERSHELL_DAEMON = '''\
+#!/usr/bin/env python3
+import json, os, socket, sys, traceback, signal
+from pathlib import Path
+from subprocess import Popen, PIPE
+
+DEFAULT_SOCKET = "./.dockerop/state/uppershelld.sock"
+
+def load_permissions(path):
+    if not path.exists():
+        return {"groups": {"deploy": ["pnpm","npm","bun"], "infrastructure": ["docker","systemctl"]}, "containers": {}}
+    try:
+        import yaml
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        groups = data.get("groups", {}) or {}
+        fixed = {}
+        for k, v in groups.items():
+            if isinstance(v, str):
+                fixed[k] = [x.strip() for x in v.split(",") if x.strip()]
+            elif isinstance(v, list):
+                fixed[k] = [str(x).strip() for x in v]
+            else:
+                fixed[k] = []
+        data["groups"] = fixed
+        return data
+    except Exception:
+        content = path.read_text(encoding="utf-8")
+        groups = {}
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"): continue
+            if ":" in line:
+                k, v = line.split(":", 1)
+                groups[k.strip()] = [x.strip() for x in v.split(",") if x.strip()]
+        return {"groups": groups, "containers": {}}
+
+def recv_json(conn):
+    h = conn.recv(8)
+    if len(h) < 8: raise ConnectionError("incomplete header")
+    size = int.from_bytes(h, "big")
+    data = b""
+    while len(data) < size:
+        chunk = conn.recv(min(4096, size - len(data)))
+        if not chunk: raise ConnectionError("connection closed")
+        data += chunk
+    return json.loads(data.decode())
+
+def send_json(conn, obj):
+    b = json.dumps(obj).encode()
+    conn.sendall(len(b).to_bytes(8, "big") + b)
+
+def validate_command(cmd, permissions, container=None):
+    if not cmd: return False, "empty command"
+    binary = cmd[0]
+    allowed = set()
+    containers = permissions.get("containers", {}) or {}
+    groups = permissions.get("groups", {}) or {}
+    if container and container in containers:
+        for g in containers[container].get("permissions", []):
+            for b in groups.get(g, []): allowed.add(b)
+    else:
+        for g in ["deploy", "infrastructure"]:
+            for b in groups.get(g, []): allowed.add(b)
+    if binary in allowed: return True, "ok"
+    return False, f"binary '{binary}' not in allowed list"
+
+def handle_request(req, permissions):
+    cwd = req.get("cwd") or os.getcwd()
+    if not Path(cwd).is_dir():
+        cwd = os.getcwd()
+    cmd = req.get("command")
+    env = req.get("environment") or {}
+    meta = req.get("meta") or {}
+    ok, reason = validate_command(cmd, permissions, meta.get("container"))
+    if not ok:
+        return {"exitCode": 126, "stdout": "", "stderr": f"Command not permitted: {reason}"}
+    try:
+        p = Popen(cmd, cwd=cwd, env={**os.environ, **env}, stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        return {"exitCode": p.returncode, "stdout": out.decode("utf-8", errors="replace"), "stderr": err.decode("utf-8", errors="replace")}
+    except FileNotFoundError as e:
+        return {"exitCode": 127, "stdout": "", "stderr": str(e)}
+    except Exception as e:
+        return {"exitCode": 1, "stdout": "", "stderr": traceback.format_exc()}
+
+def serve(socket_path, permissions_path):
+    sock_path = Path(socket_path)
+    if sock_path.exists():
+        try: sock_path.unlink()
+        except: pass
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(str(sock_path))
+    server.listen(5)
+    pid_file = sock_path.with_suffix(".pid")
+    pid_file.write_text(str(os.getpid()))
+    permissions = load_permissions(Path(permissions_path))
+    def cleanup(sig, frame):
+        try: server.close()
+        except: pass
+        try: sock_path.unlink()
+        except: pass
+        try: pid_file.unlink()
+        except: pass
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+    try:
+        while True:
+            conn, _ = server.accept()
+            try:
+                req = recv_json(conn)
+                resp = handle_request(req, permissions)
+                send_json(conn, resp)
+            except Exception as e:
+                try: send_json(conn, {"exitCode": 1, "stdout": "", "stderr": str(e)})
+                except: pass
+            finally:
+                conn.close()
+    finally:
+        try: server.close()
+        except: pass
+        try: sock_path.unlink()
+        except: pass
+        try: pid_file.unlink()
+        except: pass
+
+def main():
+    socket_path = os.environ.get("UPPERSHELL_SOCKET") or DEFAULT_SOCKET
+    permissions_path = os.environ.get("UPPERSHELL_PERMISSIONS") or "./.dockerop/state/uppershell/permissions.yaml"
+    serve(socket_path, permissions_path)
+
+if __name__ == "__main__":
+    main()
 '''
 
 
@@ -468,6 +605,69 @@ def print_banner(config: dict, root: Path) -> None:
     print(banner, flush=True)
 
 
+def _daemon_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def _write_daemon_files(app_dir: Path) -> None:
+    us_dir = app_dir / "uppershell"
+    us_dir.mkdir(parents=True, exist_ok=True)
+    write_file(us_dir / "uppershelld.py", UPPERSHELL_DAEMON, force=True)
+    write_file(us_dir / "uppershell-client.py", UPPERSHELL_CLIENT, force=True)
+
+
+def ensure_uppershell_daemon(root: Path) -> str:
+    app_dir = dockerop_dir(root)
+    state_dir = app_dir / "state"
+    sock_path = state_dir / "uppershelld.sock"
+    pid_file = state_dir / "uppershelld.pid"
+    permissions_dir = state_dir / "uppershell"
+    permissions_dir.mkdir(parents=True, exist_ok=True)
+    permissions_file = permissions_dir / "permissions.yaml"
+    if not permissions_file.exists():
+        write_file(permissions_file, "groups:\n  deploy:\n    - pnpm\n    - npm\n    - bun\n    - yarn\n  infrastructure:\n    - docker\n", force=False)
+
+    _write_daemon_files(app_dir)
+
+    if sock_path.exists():
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                if _daemon_is_alive(pid):
+                    return str(sock_path)
+            except (ValueError, OSError):
+                pass
+        try:
+            sock_path.unlink()
+        except OSError:
+            pass
+
+    daemon_script = app_dir / "uppershell" / "uppershelld.py"
+    env = os.environ.copy()
+    env["UPPERSHELL_SOCKET"] = str(sock_path)
+    env["UPPERSHELL_PERMISSIONS"] = str(permissions_file)
+    proc = subprocess.Popen(
+        [sys.executable, str(daemon_script)],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    for _ in range(30):
+        if sock_path.exists():
+            break
+        time.sleep(0.1)
+    if not sock_path.exists():
+        print("warning: uppershelld failed to start (socket not created)", file=sys.stderr)
+        return str(sock_path)
+    print(f"uppershelld started (pid {proc.pid})", file=sys.stderr)
+    return str(sock_path)
+
+
 def apply_run_flags(args: argparse.Namespace, config: dict, root: Path) -> None:
     if getattr(args, "uppershell", False):
         method = config.get("install_method", DEFAULT_INSTALL_METHOD)
@@ -476,8 +676,8 @@ def apply_run_flags(args: argparse.Namespace, config: dict, root: Path) -> None:
             config.setdefault("opencode_image", DEFAULT_OPENCODE_IMAGE)
             print("switched to install-script method for uppershell (python3 required)")
         config["uppershell_enabled"] = True
-        us_socket = str(dockerop_dir(root) / DEFAULT_UPPERSHELL_SOCKET_PROJECT.lstrip("./"))
-        config.setdefault("uppershell_socket", us_socket)
+        us_socket = ensure_uppershell_daemon(root)
+        config["uppershell_socket"] = us_socket
     volumes = getattr(args, "volume", None)
     if volumes:
         existing = config.get("extra_volumes", [])
@@ -511,7 +711,9 @@ def start(args: argparse.Namespace) -> int:
     session_id = getattr(args, "session", None)
     if session_id:
         run_command += ["-s", session_id]
-    override = getattr(args, "command", None)
+    override = getattr(args, "command", None) or []
+    if override and override[0] == "--":
+        override = override[1:]
     if override:
         run_command += override
     return subprocess.call(run_command, cwd=root)
@@ -529,14 +731,8 @@ def prepare_runtime(root: Path) -> dict:
 
 
 US_INIT = (
-    "python3 -c \""
-    "import os;"
-    "p='/tmp/uppershell';"
-    "f=open(p,'w');"
-    "f.write('#!/bin/sh\\nexec python3 /usr/local/lib/uppershell/client.py \\\"$@\\\"\\n');"
-    "f.close();"
-    "os.chmod(p,0o755)"
-    "\""
+    "printf '%s\\n' '#!/bin/sh' 'exec python3 /usr/local/lib/uppershell/client.py \"$@\"' > /tmp/uppershell"
+    " && chmod 755 /tmp/uppershell"
     " && export PATH=/tmp:$PATH"
 )
 US_SHELL_FALLBACK = f'{US_INIT} && (command -v bash >/dev/null 2>&1 && exec bash || exec sh)'
@@ -547,7 +743,9 @@ def shell(args: argparse.Namespace) -> int:
     config = require_initialized(root)
     apply_run_flags(args, config, root)
     us = config.get("uppershell_enabled")
-    shell_command = getattr(args, "command", None)
+    shell_command = getattr(args, "command", None) or []
+    if shell_command and shell_command[0] == "--":
+        shell_command = shell_command[1:]
     if shell_command:
         if us:
             return shell_run(root, "-c", f'{US_INIT} && exec "$@"', "sh", *shell_command)
@@ -730,9 +928,31 @@ def netcheck_script() -> str:
     )
 
 
+def stop_daemon(root: Path) -> None:
+    app_dir = dockerop_dir(root)
+    pid_file = app_dir / "state" / "uppershelld.pid"
+    sock_path = app_dir / "state" / "uppershelld.sock"
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, signal.SIGTERM)
+        except (ValueError, OSError):
+            pass
+        try:
+            pid_file.unlink()
+        except OSError:
+            pass
+    if sock_path.exists():
+        try:
+            sock_path.unlink()
+        except OSError:
+            pass
+
+
 def stop(_: argparse.Namespace) -> int:
     root = project_root()
     require_initialized(root)
+    stop_daemon(root)
     return compose_call(root, "down", "--remove-orphans")
 
 
@@ -755,7 +975,9 @@ def run_command(args: argparse.Namespace) -> int:
     compose_file = dockerop_dir(root) / "compose.yaml"
     command = docker_compose_command()
     run_args = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
-    cmd = getattr(args, "command", None)
+    cmd = getattr(args, "command", None) or []
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
     if config.get("uppershell_enabled") and cmd:
         run_args += ["--entrypoint", "sh", "opencode", "-c",
                       f'{US_INIT} && exec sh -c {shlex.quote(" ".join(cmd))}']
@@ -1121,9 +1343,15 @@ def normalize_help_aliases(argv: list[str]) -> list[str]:
 
 def main() -> int:
     parser = build_parser()
-    if any(arg in ("--version", "-V") for arg in sys.argv[1:]):
-        return version(argparse.Namespace())
-    args = parser.parse_args(normalize_help_aliases(sys.argv[1:]))
+    argv = sys.argv[1:]
+    pre_subcmd = []
+    for a in argv:
+        if a in ("--version", "-V"):
+            return version(argparse.Namespace())
+        pre_subcmd.append(a)
+        if not a.startswith("-"):
+            break
+    args = parser.parse_args(normalize_help_aliases(argv))
 
     try:
         return args.func(args)
