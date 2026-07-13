@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1
+
+- Fix uppershell: create wrapper at runtime in /tmp to avoid bind mount permission issues.
+- Fix bash fallback when container doesn't have bash installed.
+- Fix quoted command handling in `dockerop run`.
+
 ## 0.5.0
 
 - Add `dockerop logs` to view container logs (`-n`, `-f`).
