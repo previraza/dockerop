@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -469,6 +470,7 @@ US_WRAPPER = (
     'printf \'#!/bin/sh\\nexec python3 /usr/local/lib/uppershell/client.py "$@"\\n\' '
     '> /tmp/uppershell && chmod +x /tmp/uppershell && export PATH="/tmp:$PATH"'
 )
+US_SHELL_FALLBACK = f'{US_WRAPPER} && (command -v bash >/dev/null 2>&1 && exec bash || exec sh)'
 
 
 def shell(args: argparse.Namespace) -> int:
@@ -482,7 +484,7 @@ def shell(args: argparse.Namespace) -> int:
             return shell_run(root, "-c", f'{US_WRAPPER} && exec "$@"', "sh", *shell_command)
         return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
     if us:
-        return shell_run(root, "-c", f'{US_WRAPPER} && exec bash')
+        return shell_run(root, "-c", US_SHELL_FALLBACK)
     return shell_run(root, "-lc", "command -v bash >/dev/null 2>&1 && exec bash || exec sh")
 
 
@@ -686,8 +688,12 @@ def run_command(args: argparse.Namespace) -> int:
     run_args = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
     cmd = getattr(args, "command", None)
     if config.get("uppershell_enabled") and cmd:
-        run_args += ["--entrypoint", "sh", "opencode", "-c",
-                      f'{US_WRAPPER} && exec "$@"', "sh", *cmd]
+        if len(cmd) == 1:
+            run_args += ["--entrypoint", "sh", "opencode", "-c",
+                          f'{US_WRAPPER} && exec {shlex.quote(cmd[0])}']
+        else:
+            run_args += ["--entrypoint", "sh", "opencode", "-c",
+                          f'{US_WRAPPER} && exec "$@"', "sh", *cmd]
     elif cmd:
         run_args += ["opencode"] + cmd
     else:
