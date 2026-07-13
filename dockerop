@@ -17,7 +17,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "install-script"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -26,6 +26,58 @@ DEFAULT_SESSION_MODE = "isolated"
 # Uppershell defaults
 DEFAULT_UPPERSHELL_SOCKET_PROJECT = "./state/uppershelld.sock"
 DEFAULT_UPPERSHELL_SOCKET_SYSTEM = "/run/uppershelld.sock"
+
+UPPERSHELL_CLIENT = '''\
+#!/usr/bin/env python3
+import json, os, socket, sys
+from pathlib import Path
+SOCKET = "/var/run/uppershelld.sock"
+def find_socket():
+    e = os.environ.get("UPPERSHELL_SOCKET")
+    if e: return e
+    for p in ["/run/uppershelld.sock", "./.dockerop/state/uppershelld.sock"]:
+        if Path(p).exists(): return p
+    return SOCKET
+def send_request(sock_path, payload):
+    b = json.dumps(payload).encode()
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.connect(sock_path)
+        s.sendall(len(b).to_bytes(8, "big") + b)
+        h = s.recv(8)
+        if len(h) < 8: raise ConnectionError("incomplete header")
+        size = int.from_bytes(h, "big")
+        data = b""
+        while len(data) < size:
+            chunk = s.recv(min(4096, size - len(data)))
+            if not chunk: raise ConnectionError("connection closed")
+            data += chunk
+        return json.loads(data.decode())
+def main():
+    import argparse
+    p = argparse.ArgumentParser(prog="uppershell")
+    p.add_argument("command", nargs=argparse.REMAINDER)
+    p.add_argument("--cwd")
+    p.add_argument("--env", action="append")
+    p.add_argument("--socket")
+    args = p.parse_args()
+    if not args.command: p.error("no command provided")
+    cmd = args.command
+    if cmd[0] == "--": cmd = cmd[1:]
+    env = {}
+    if args.env:
+        for i in args.env:
+            if "=" in i:
+                k, v = i.split("=", 1); env[k] = v
+    payload = {"cwd": args.cwd or os.getcwd(), "command": cmd, "environment": env, "meta": {"container": os.environ.get("HOSTNAME")}}
+    sock = args.socket or find_socket()
+    try: resp = send_request(sock, payload)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr); sys.exit(2)
+    if resp.get("stdout"): sys.stdout.write(resp["stdout"])
+    if resp.get("stderr"): sys.stderr.write(resp["stderr"])
+    sys.exit(resp.get("exitCode", 1))
+if __name__ == "__main__": main()
+'''
 
 
 def project_root() -> Path:
@@ -227,13 +279,13 @@ def compose(config: dict) -> str:
     )
     if config.get("uppershell_enabled"):
         us_socket = config.get("uppershell_socket", DEFAULT_UPPERSHELL_SOCKET_PROJECT)
-        uppershell_dir = Path(__file__).resolve().parent / "uppershell"
+        us_client = "./uppershell/uppershell-client.py"
         lines.extend([
             "      - type: bind",
             f"        source: {yaml_quote(us_socket)}",
             "        target: /var/run/uppershelld.sock",
             "      - type: bind",
-            f"        source: {yaml_quote(uppershell_dir / 'python-ref' / 'uppershell-client.py')}",
+            f"        source: {yaml_quote(us_client)}",
             "        target: /usr/local/lib/uppershell/client.py",
         ])
     for vol in config.get("extra_volumes", []):
@@ -328,6 +380,10 @@ def write_runtime_files(root: Path, config: dict, force: bool) -> None:
             dockerfile_path.unlink()
     else:
         write_file(dockerfile_path, dockerfile(config["install_method"]), force)
+    if config.get("uppershell_enabled"):
+        us_dst = app_dir / "uppershell" / "uppershell-client.py"
+        us_dst.parent.mkdir(parents=True, exist_ok=True)
+        write_file(us_dst, UPPERSHELL_CLIENT, force=True)
     write_file(app_dir / "compose.yaml", compose(config), force)
     write_file(app_dir / ".gitignore", dockerop_gitignore(), force)
 
@@ -953,6 +1009,11 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser.add_argument("--no-build", action="store_true", help="do not build the Docker image")
     start_parser.add_argument("--no-banner", action="store_true", help="do not print dockerop launch banner")
     start_parser.add_argument("-s", "--session", help="start OpenCode with a session id")
+    start_parser.add_argument("-us", "--uppershell", action="store_true", help="mount UpperShell socket into the container")
+    start_parser.add_argument("-v", "--volume", action="append", default=[], help="extra volume mount host:container (repeatable)")
+    start_parser.add_argument("--memory", help="container memory limit (e.g. 4g)")
+    start_parser.add_argument("--cpus", help="container CPU limit (e.g. 2.0)")
+    start_parser.add_argument("--gpu", action="store_true", help="pass NVIDIA GPU to container")
     start_parser.add_argument("command", nargs=argparse.REMAINDER, help="optional command passed after opencode")
     start_parser.set_defaults(func=start)
 
@@ -992,6 +1053,11 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.set_defaults(func=logs)
 
     run_parser = subparsers.add_parser("run", help="run a command in the container")
+    run_parser.add_argument("-us", "--uppershell", action="store_true", help="mount UpperShell socket into the container")
+    run_parser.add_argument("-v", "--volume", action="append", default=[], help="extra volume mount host:container (repeatable)")
+    run_parser.add_argument("--memory", help="container memory limit (e.g. 4g)")
+    run_parser.add_argument("--cpus", help="container CPU limit (e.g. 2.0)")
+    run_parser.add_argument("--gpu", action="store_true", help="pass NVIDIA GPU to container")
     run_parser.add_argument("command", nargs=argparse.REMAINDER, help="command to run")
     run_parser.set_defaults(func=run_command)
 

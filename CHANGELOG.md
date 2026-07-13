@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3
+
+- Embed uppershell client in dockerop script (no external file dependency).
+- Fix compose mount paths (use relative paths for docker compose).
+- Add run flags (-us, -v, --memory, --cpus, --gpu) to start and run subparsers.
+
 ## 0.6.2
 
 - Auto-switch to install-script when uppershell is enabled with image method.
