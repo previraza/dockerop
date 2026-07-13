@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0
+
+- Add `dockerop logs` to view container logs (`-n`, `-f`).
+- Add `dockerop run` to execute a command in the container without shell entrypoint.
+- Add `-v`/`--volume` flag for extra bind mounts (repeatable).
+- Add `--memory`, `--cpus` flags for container resource limits.
+- Add `--gpu` flag for NVIDIA GPU passthrough.
+- Add `dockerop completions bash|zsh|fish` for shell tab-completion.
+- Remove `run` alias from `start` (now its own command).
+
 ## 0.4.3
 
 - Fix uppershell permission denied: mount client directly as `/usr/local/bin/uppershell`.

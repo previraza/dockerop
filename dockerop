@@ -16,7 +16,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.4.3"
+VERSION = "0.5.0"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -234,6 +234,34 @@ def compose(config: dict) -> str:
             f"        source: {yaml_quote(uppershell_dir / 'python-ref' / 'uppershell-client.py')}",
             "        target: /usr/local/bin/uppershell",
         ])
+    for vol in config.get("extra_volumes", []):
+        parts = vol.split(":")
+        if len(parts) == 2:
+            lines.extend([
+                "      - type: bind",
+                f"        source: {yaml_quote(parts[0])}",
+                f"        target: {parts[1]}",
+            ])
+    memory = config.get("memory")
+    cpus = config.get("cpus")
+    if memory or cpus:
+        lines.append("    deploy:")
+        lines.append("      resources:")
+        lines.append("        limits:")
+        if memory:
+            lines.append(f"          memory: {memory}")
+        if cpus:
+            lines.append(f"          cpus: \"{cpus}\"")
+    if config.get("gpu"):
+        lines.extend([
+            "    deploy:",
+            "      resources:",
+            "        reservations:",
+            "          devices:",
+            "            - driver: nvidia",
+            "              count: all",
+            "              capabilities: [gpu]",
+        ])
     if uid is not None and gid is not None:
         insert_at = lines.index("    stdin_open: true")
         lines.insert(insert_at, f'    user: "{uid}:{gid}"')
@@ -382,15 +410,31 @@ def print_banner(config: dict, root: Path) -> None:
     print(banner, flush=True)
 
 
-def start(args: argparse.Namespace) -> int:
-    root = project_root()
-    config = prepare_runtime(root)
+def apply_run_flags(args: argparse.Namespace, config: dict, root: Path) -> None:
     if getattr(args, "uppershell", False):
         config["uppershell_enabled"] = True
         us_socket = str(dockerop_dir(root) / DEFAULT_UPPERSHELL_SOCKET_PROJECT.lstrip("./"))
         config.setdefault("uppershell_socket", us_socket)
-        save_config(root, config)
-        write_runtime_files(root, config, force=True)
+    volumes = getattr(args, "volume", None)
+    if volumes:
+        existing = config.get("extra_volumes", [])
+        config["extra_volumes"] = existing + volumes
+    memory = getattr(args, "memory", None)
+    if memory:
+        config["memory"] = memory
+    cpus = getattr(args, "cpus", None)
+    if cpus:
+        config["cpus"] = cpus
+    if getattr(args, "gpu", False):
+        config["gpu"] = True
+    save_config(root, config)
+    write_runtime_files(root, config, force=True)
+
+
+def start(args: argparse.Namespace) -> int:
+    root = project_root()
+    config = prepare_runtime(root)
+    apply_run_flags(args, config, root)
 
     if not getattr(args, "no_banner", False):
         print_banner(config, root)
@@ -423,13 +467,8 @@ def prepare_runtime(root: Path) -> dict:
 
 def shell(args: argparse.Namespace) -> int:
     root = project_root()
-    if getattr(args, "uppershell", False):
-        config = require_initialized(root)
-        config["uppershell_enabled"] = True
-        us_socket = str(dockerop_dir(root) / DEFAULT_UPPERSHELL_SOCKET_PROJECT.lstrip("./"))
-        config.setdefault("uppershell_socket", us_socket)
-        save_config(root, config)
-        write_runtime_files(root, config, force=True)
+    config = require_initialized(root)
+    apply_run_flags(args, config, root)
     shell_command = getattr(args, "command", None)
     if shell_command:
         return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
@@ -613,6 +652,31 @@ def stop(_: argparse.Namespace) -> int:
     root = project_root()
     require_initialized(root)
     return compose_call(root, "down", "--remove-orphans")
+
+
+def logs(args: argparse.Namespace) -> int:
+    root = project_root()
+    require_initialized(root)
+    tail = getattr(args, "tail", 100)
+    follow = getattr(args, "follow", False)
+    cmd = ["logs", f"--tail={tail}"]
+    if follow:
+        cmd.append("-f")
+    cmd.append("opencode")
+    return compose_call(root, *cmd)
+
+
+def run_command(args: argparse.Namespace) -> int:
+    root = project_root()
+    config = prepare_runtime(root)
+    apply_run_flags(args, config, root)
+    compose_file = dockerop_dir(root) / "compose.yaml"
+    command = docker_compose_command()
+    run_args = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
+    cmd = getattr(args, "command", None)
+    if cmd:
+        run_args += cmd
+    return subprocess.call(run_args, cwd=root)
 
 
 def reset(args: argparse.Namespace) -> int:
@@ -799,6 +863,18 @@ def mi_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def completions_command(args: argparse.Namespace) -> int:
+    shell_name = args.shell
+    script_dir = Path(__file__).resolve().parent / "completions"
+    filename = f"dockerop.{shell_name}"
+    script_path = script_dir / filename
+    if not script_path.exists():
+        print(f"completion script not found: {script_path}", file=sys.stderr)
+        return 1
+    print(script_path.read_text(encoding="utf-8"))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     examples = textwrap.dedent(
         """\
@@ -819,6 +895,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="store_true", help="show dockerop version")
     parser.add_argument("-s", "--session", help="start OpenCode with a session id")
     parser.add_argument("-us", "--uppershell", action="store_true", help="mount UpperShell socket into the container")
+    parser.add_argument("-v", "--volume", action="append", default=[], help="extra volume mount host:container (repeatable)")
+    parser.add_argument("--memory", help="container memory limit (e.g. 4g)")
+    parser.add_argument("--cpus", help="container CPU limit (e.g. 2.0)")
+    parser.add_argument("--gpu", action="store_true", help="enable NVIDIA GPU passthrough")
     subparsers = parser.add_subparsers(dest="command")
 
     init_parser = subparsers.add_parser("init", aliases=["i"], help=f"create {APP_DIR}/ configuration")
@@ -832,7 +912,7 @@ def build_parser() -> argparse.ArgumentParser:
     init_parser.add_argument("-q", "--quiet", action="store_true", help="only print errors")
     init_parser.set_defaults(func=init)
 
-    start_parser = subparsers.add_parser("start", aliases=["run", "s"], help="start OpenCode in Docker")
+    start_parser = subparsers.add_parser("start", aliases=["s"], help="start OpenCode in Docker")
     start_parser.add_argument("--no-build", action="store_true", help="do not build the Docker image")
     start_parser.add_argument("--no-banner", action="store_true", help="do not print dockerop launch banner")
     start_parser.add_argument("-s", "--session", help="start OpenCode with a session id")
@@ -868,6 +948,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     stop_parser = subparsers.add_parser("stop", aliases=["down"], help="stop Docker resources without deleting state")
     stop_parser.set_defaults(func=stop)
+
+    logs_parser = subparsers.add_parser("logs", help="show container logs")
+    logs_parser.add_argument("-n", "--tail", type=int, default=100, help="number of lines to show (default: 100)")
+    logs_parser.add_argument("-f", "--follow", action="store_true", help="follow log output")
+    logs_parser.set_defaults(func=logs)
+
+    run_parser = subparsers.add_parser("run", help="run a command in the container")
+    run_parser.add_argument("command", nargs=argparse.REMAINDER, help="command to run")
+    run_parser.set_defaults(func=run_command)
 
     destroy_parser = subparsers.add_parser("destroy", aliases=["rm"], help=f"remove {APP_DIR}/ and Docker resources")
     destroy_parser.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
@@ -911,6 +1000,10 @@ def build_parser() -> argparse.ArgumentParser:
     mi_reset = mi_sub.add_parser("reset", help="generate a new random machine id")
     mi_reset.set_defaults(func=mi_command, mi_action="reset")
     mi_parser.set_defaults(func=mi_command)
+
+    completions_parser = subparsers.add_parser("completions", help="print shell completion script")
+    completions_parser.add_argument("shell", choices=("bash", "zsh", "fish"), help="shell type")
+    completions_parser.set_defaults(func=completions_command)
 
     help_parser = subparsers.add_parser("help", aliases=["?"], help="show this help")
     help_parser.set_defaults(func=help_command)
