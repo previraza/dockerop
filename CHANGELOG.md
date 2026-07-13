@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Add `dockerop update` to self-update from GitHub.
+- Add `dockerop reset machineId` to generate a new random machine id.
+- Add `-us` / `--uppershell` flag to mount UpperShell socket into the container.
+
 ## 0.3.11
 
 - Fix Windows startup by avoiding `os.getuid()` / `os.getgid()` when unavailable.
