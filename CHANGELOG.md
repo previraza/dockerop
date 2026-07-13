@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2
+
+- Add python3 to Dockerfile packages for uppershell support.
+- Fix uppershell wrapper: use US_INIT consistently, fix quoted command parsing in run.
+
 ## 0.5.1
 
 - Fix uppershell: create wrapper at runtime in /tmp to avoid bind mount permission issues.

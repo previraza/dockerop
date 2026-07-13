@@ -17,7 +17,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -113,6 +113,7 @@ def dockerfile(method: str) -> str:
             "        curl \\",
             "        git \\",
             "        openssh-client \\",
+            "        python3 \\",
             "    && rm -rf /var/lib/apt/lists/*",
             "",
         ]
@@ -466,11 +467,18 @@ def prepare_runtime(root: Path) -> dict:
     return config
 
 
-US_WRAPPER = (
-    'printf \'#!/bin/sh\\nexec python3 /usr/local/lib/uppershell/client.py "$@"\\n\' '
-    '> /tmp/uppershell && chmod +x /tmp/uppershell && export PATH="/tmp:$PATH"'
+US_INIT = (
+    "python3 -c \""
+    "import os;"
+    "p='/tmp/uppershell';"
+    "f=open(p,'w');"
+    "f.write('#!/bin/sh\\nexec python3 /usr/local/lib/uppershell/client.py \\\"$@\\\"\\n');"
+    "f.close();"
+    "os.chmod(p,0o755)"
+    "\""
+    " && export PATH=/tmp:$PATH"
 )
-US_SHELL_FALLBACK = f'{US_WRAPPER} && (command -v bash >/dev/null 2>&1 && exec bash || exec sh)'
+US_SHELL_FALLBACK = f'{US_INIT} && (command -v bash >/dev/null 2>&1 && exec bash || exec sh)'
 
 
 def shell(args: argparse.Namespace) -> int:
@@ -481,7 +489,7 @@ def shell(args: argparse.Namespace) -> int:
     shell_command = getattr(args, "command", None)
     if shell_command:
         if us:
-            return shell_run(root, "-c", f'{US_WRAPPER} && exec "$@"', "sh", *shell_command)
+            return shell_run(root, "-c", f'{US_INIT} && exec "$@"', "sh", *shell_command)
         return shell_run(root, "-lc", 'exec "$@"', "sh", *shell_command)
     if us:
         return shell_run(root, "-c", US_SHELL_FALLBACK)
@@ -688,12 +696,8 @@ def run_command(args: argparse.Namespace) -> int:
     run_args = command + ["-f", str(compose_file), "run", "--rm", "--workdir", "/workspace"]
     cmd = getattr(args, "command", None)
     if config.get("uppershell_enabled") and cmd:
-        if len(cmd) == 1:
-            run_args += ["--entrypoint", "sh", "opencode", "-c",
-                          f'{US_WRAPPER} && exec {shlex.quote(cmd[0])}']
-        else:
-            run_args += ["--entrypoint", "sh", "opencode", "-c",
-                          f'{US_WRAPPER} && exec "$@"', "sh", *cmd]
+        run_args += ["--entrypoint", "sh", "opencode", "-c",
+                      f'{US_INIT} && exec {shlex.quote(" ".join(cmd))}']
     elif cmd:
         run_args += ["opencode"] + cmd
     else:
