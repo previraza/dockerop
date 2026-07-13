@@ -20,7 +20,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.6.6"
+VERSION = "0.6.7"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "install-script"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -756,7 +756,7 @@ def start(args: argparse.Namespace) -> int:
     override = getattr(args, "command", None) or []
     if override and override[0] == "--":
         override = override[1:]
-    if len(override) == 1 and " " in override[0]:
+    if override and len(override) == 1 and " " in override[0]:
         override = shlex.split(override[0])
     if override:
         run_command += override
@@ -790,7 +790,7 @@ def shell(args: argparse.Namespace) -> int:
     shell_command = getattr(args, "command", None) or []
     if shell_command and shell_command[0] == "--":
         shell_command = shell_command[1:]
-    if len(shell_command) == 1 and " " in shell_command[0]:
+    if shell_command and len(shell_command) == 1 and " " in shell_command[0]:
         shell_command = shlex.split(shell_command[0])
     if shell_command:
         if us:
@@ -1027,7 +1027,7 @@ def run_command(args: argparse.Namespace) -> int:
     cmd = getattr(args, "command", None) or []
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
-    if len(cmd) == 1 and " " in cmd[0]:
+    if cmd and len(cmd) == 1 and " " in cmd[0]:
         cmd = shlex.split(cmd[0])
     if config.get("uppershell_enabled") and cmd:
         run_args += ["--entrypoint", "sh", "opencode", "-c",

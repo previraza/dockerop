@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7
+
+- Fix regression in command argument handling that prevented default execution.
+
 ## 0.6.6
 
 - Support splitting single command arguments containing spaces with `shlex.split`.
