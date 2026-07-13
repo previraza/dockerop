@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Add `-us` / `--uppershell` flag to `dockerop shell`.
+
 ## 0.4.0
 
 - Add `dockerop update` to self-update from GitHub.
