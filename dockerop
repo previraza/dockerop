@@ -16,7 +16,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.4.2"
+VERSION = "0.4.3"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "image"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -231,13 +231,8 @@ def compose(config: dict) -> str:
             f"        source: {yaml_quote(us_socket)}",
             "        target: /var/run/uppershelld.sock",
             "      - type: bind",
-            f"        source: {yaml_quote(uppershell_dir / 'uppershell')}",
-            "        target: /usr/local/bin/uppershell",
-            "        read_only: true",
-            "      - type: bind",
             f"        source: {yaml_quote(uppershell_dir / 'python-ref' / 'uppershell-client.py')}",
-            "        target: /usr/local/bin/.uppershell-client.py",
-            "        read_only: true",
+            "        target: /usr/local/bin/uppershell",
         ])
     if uid is not None and gid is not None:
         insert_at = lines.index("    stdin_open: true")
@@ -786,6 +781,24 @@ def update_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def mi_command(args: argparse.Namespace) -> int:
+    root = project_root()
+    config = require_initialized(root)
+    action = getattr(args, "mi_action", None)
+    if action == "reset":
+        state_dir = dockerop_dir(root) / "state"
+        old_id = config["machine_id"]
+        new_id = random_machine_id()
+        config["machine_id"] = new_id
+        save_config(root, config)
+        (state_dir / "machine-id").write_text(new_id + "\n", encoding="utf-8")
+        write_runtime_files(root, config, force=True)
+        print(f"machine_id: {old_id} -> {new_id}")
+        return 0
+    print(f"machine_id: {config['machine_id']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     examples = textwrap.dedent(
         """\
@@ -892,6 +905,12 @@ def build_parser() -> argparse.ArgumentParser:
     update_parser = subparsers.add_parser("update", help="update dockerop to the latest version")
     update_parser.add_argument("--force", action="store_true", help="force update even if version matches")
     update_parser.set_defaults(func=update_command)
+
+    mi_parser = subparsers.add_parser("mi", help="show or reset machine id")
+    mi_sub = mi_parser.add_subparsers(dest="mi_action")
+    mi_reset = mi_sub.add_parser("reset", help="generate a new random machine id")
+    mi_reset.set_defaults(func=mi_command, mi_action="reset")
+    mi_parser.set_defaults(func=mi_command)
 
     help_parser = subparsers.add_parser("help", aliases=["?"], help="show this help")
     help_parser.set_defaults(func=help_command)

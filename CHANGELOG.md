@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.3
+
+- Fix uppershell permission denied: mount client directly as `/usr/local/bin/uppershell`.
+- Add `dockerop mi` to show machine id, `dockerop mi reset` to regenerate it.
+
 ## 0.4.2
 
 - Mount uppershell client and wrapper into container when using `-us`, so `uppershell <cmd>` works out of the box.
