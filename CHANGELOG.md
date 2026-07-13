@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Auto-switch to install-script when uppershell is enabled with image method.
+- Add uppershell method check in `dockerop doctor`.
+
 ## 0.6.1
 
 - Version bump.

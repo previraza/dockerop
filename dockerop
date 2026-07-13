@@ -17,7 +17,7 @@ from pathlib import Path
 
 APP_DIR = ".dockerop"
 CONFIG_FILE = "config.json"
-VERSION = "0.6.1"
+VERSION = "0.6.2"
 DEFAULT_OPENCODE_IMAGE = "ghcr.io/anomalyco/opencode"
 DEFAULT_INSTALL_METHOD = "install-script"
 DEFAULT_NETWORK_MODE = "bridge"
@@ -414,6 +414,11 @@ def print_banner(config: dict, root: Path) -> None:
 
 def apply_run_flags(args: argparse.Namespace, config: dict, root: Path) -> None:
     if getattr(args, "uppershell", False):
+        method = config.get("install_method", DEFAULT_INSTALL_METHOD)
+        if method == "image":
+            config["install_method"] = "install-script"
+            config.setdefault("opencode_image", DEFAULT_OPENCODE_IMAGE)
+            print("switched to install-script method for uppershell (python3 required)")
         config["uppershell_enabled"] = True
         us_socket = str(dockerop_dir(root) / DEFAULT_UPPERSHELL_SOCKET_PROJECT.lstrip("./"))
         config.setdefault("uppershell_socket", us_socket)
@@ -765,6 +770,12 @@ def doctor(_: argparse.Namespace) -> int:
         print(f"config:   {config_path(root)}")
         if docker:
             ok = compose_call(root, "config", "--quiet") == 0 and ok
+        config = load_config(root)
+        method = config.get("install_method", DEFAULT_INSTALL_METHOD)
+        print(f"method:   {method}")
+        if config.get("uppershell_enabled") and method == "image":
+            print("warning:  uppershell requires install-script or npm method (no python3 in image)")
+            ok = False
     else:
         print("config:   not initialized")
     return 0 if ok else 1
